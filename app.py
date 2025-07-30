@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from zhipuai import ZhipuAI
+from zai import ZhipuAiClient  # 替换zhipuai为zai
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -21,8 +21,8 @@ from visualization import DataVisualizer
 # 配置你的API密钥
 API_KEY = "7f19e322592746f4967003fdde505901.LYWsCBh699azgL8J"
 
-# 初始化ZhipuAI客户端和管理器
-client = ZhipuAI(api_key=API_KEY)
+# 初始化ZhipuAiClient客户端和管理器
+client = ZhipuAiClient(api_key=API_KEY)  # 替换初始化
 db_manager = DatabaseManager()
 file_manager = FileManager(db_manager)
 stats_manager = FunctionCallStatistics(db_manager)
@@ -185,6 +185,49 @@ class ZhipuAIChatModel(BaseChatModel):
         for generation in result.generations:
             yield generation
 
+# 意图识别函数
+def detect_intent(text: str) -> str:
+    """识别用户输入意图，返回 'chat' 或 'food'"""
+    try:
+        # 创建意图识别的提示 - 不使用历史上下文
+        intent_prompt = f"""不用思考，直接给出判断，不要有任何解释
+请判断下面这句话的意图，只回答\"chat\"或\"food\"：
+
+用户输入：{text}
+
+判断标准：
+
+注意用户回答里面只要有食物相关的内容（如炸鸡，吃了什么，等）则回答food，否则回答chat
+
+回答：
+"""
+        # 调用LLM进行意图识别 - 不使用历史上下文，限制输出长度
+        response = client.chat.completions.create(
+            model="glm-4.5",
+            messages=[{"role": "user", "content": intent_prompt}],
+            max_tokens=1000,  # 限制输出长度，避免重复
+            temperature=0.1,  # 降低随机性，提高一致性
+            thinking={
+                "type": "disabled"
+            }
+        )
+        # zai的同步调用直接取response.choices[0].message.content
+        print(response)
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            result = response.choices[0].message.content.strip()
+            print(f"意图识别结果: {result}")
+            # 判断结果
+            if "food" in result:
+                return "record"
+            else:
+                return "chat"
+        else:
+            print("意图识别失败，默认返回闲聊")
+            return "chat"
+    except Exception as e:
+        print(f"意图识别出错: {str(e)}")
+        return "chat"  # 出错时默认返回闲聊
+
 # 定义工具函数
 @tool
 def record_thing(date: str, eat: str, money: str) -> dict:
@@ -311,7 +354,7 @@ def generate_eating_charts() -> dict:
         return {"status": "error", "message": str(e)}
 
 # 创建工具列表
-tools = [
+all_tools = [
     record_thing,
     read_file,
     write_file,
@@ -328,20 +371,40 @@ tools = [
 # 创建聊天模型
 chat_model = ZhipuAIChatModel(client)
 
-# 绑定工具到模型
-chat_model_with_tools = chat_model.bind_tools(tools)
+# 创建闲聊Agent（不绑定工具）
+chat_model_for_chat = ZhipuAIChatModel(client)
+chat_model_with_chat_tools = chat_model_for_chat.bind_tools([])  # 闲聊agent不绑定工具
 
-# 设置系统提示
-system_prompt = """
-你是一个提供情绪价值的闲聊助手，同时帮助用户记录信息。
+# 创建记录Agent（绑定所有工具）
+chat_model_for_record = ZhipuAIChatModel(client)
+chat_model_with_record_tools = chat_model_for_record.bind_tools(all_tools)
+
+# 闲聊Agent的系统提示
+chat_system_prompt = """
+你是一个提供情绪价值的闲聊助手。
+
+你的主要工作是：
+1. 和用户进行友好的闲聊
+2. 保持热情和积极的态度
+3. 提供情感支持和陪伴
+4. 不要涉及任何数据记录或查询功能
+
+记住：你只负责闲聊，不处理任何数据记录相关的请求。
+"""
+
+# 记录Agent的系统提示
+record_system_prompt = """
+你是一个专门帮助用户记录和查询饮食消费信息的助手。
 
 你的主要工作流程是：
-1. 和用户闲聊，保持友好和热情
-2. 当用户提到日期(date)、食物(eat)和金额(money)的完整信息时，调用record_thing函数记录
-3. 如果用户只提供了部分信息，引导他们补充完整所有必要信息
+1. 当用户提到日期(date)、食物(eat)和金额(money)的完整信息时，调用record_thing函数记录
+2. 如果用户只提供了部分信息，引导他们补充完整所有必要信息
+3. 帮助用户查询历史记录和统计数据
+4. 保持友好和专业的服务态度
+5. 每个记录请求只调用一次record_thing函数，不要重复调用
 
 你可以使用以下功能：
-- record_thing: 记录用户的饮食和消费信息
+- record_thing: 记录用户的饮食和消费信息（每个请求只调用一次）
 - read_file: 读取文件内容
 - write_file: 写入内容到文件
 - list_directory: 列出目录内容
@@ -352,23 +415,44 @@ system_prompt = """
 - get_eating_stats: 获取饮食统计
 - generate_function_chart: 生成函数调用可视化图表
 - generate_eating_charts: 生成饮食统计可视化图表
+
+重要提醒：每个用户请求只调用一次record_thing函数，避免重复记录。
 """
 
-# 创建提示模板
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
+# 创建闲聊Agent的提示模板
+chat_prompt = ChatPromptTemplate.from_messages([
+    ("system", chat_system_prompt),
     ("placeholder", "{chat_history}"),
     ("human", "{input}"),
     ("placeholder", "{agent_scratchpad}"),
 ])
 
-# 创建代理
-agent = create_tool_calling_agent(chat_model_with_tools, tools, prompt)
+# 创建记录Agent的提示模板
+record_prompt = ChatPromptTemplate.from_messages([
+    ("system", record_system_prompt),
+    ("placeholder", "{chat_history}"),
+    ("human", "{input}"),
+    ("placeholder", "{agent_scratchpad}"),
+])
 
-# 创建代理执行器
-agent_executor = AgentExecutor(
-    agent=agent,
-    tools=tools,
+# 创建闲聊Agent
+chat_agent = create_tool_calling_agent(chat_model_with_chat_tools, [], chat_prompt)
+
+# 创建记录Agent
+record_agent = create_tool_calling_agent(chat_model_with_record_tools, all_tools, record_prompt)
+
+# 创建闲聊Agent执行器
+chat_agent_executor = AgentExecutor(
+    agent=chat_agent,
+    tools=[],
+    verbose=True,
+    handle_parsing_errors=True
+)
+
+# 创建记录Agent执行器
+record_agent_executor = AgentExecutor(
+    agent=record_agent,
+    tools=all_tools,
     verbose=True,
     handle_parsing_errors=True
 )
@@ -381,9 +465,17 @@ def get_session_history(session_id: str) -> InMemoryChatMessageHistory:
         store[session_id] = InMemoryChatMessageHistory()
     return store[session_id]
 
-# 创建带聊天历史的代理
-agent_with_chat_history = RunnableWithMessageHistory(
-    agent_executor,
+# 创建带聊天历史的闲聊Agent
+chat_agent_with_history = RunnableWithMessageHistory(
+    chat_agent_executor,
+    get_session_history,
+    input_messages_key="input",
+    history_messages_key="chat_history",
+)
+
+# 创建带聊天历史的记录Agent
+record_agent_with_history = RunnableWithMessageHistory(
+    record_agent_executor,
     get_session_history,
     input_messages_key="input",
     history_messages_key="chat_history",
@@ -406,11 +498,23 @@ if __name__ == "__main__":
                 continue
             
             try:
-                # 使用代理处理用户输入
+                # 第一步：意图识别
+                intent = detect_intent(user_input)
+                print(f"识别意图: {intent}")
+                
+                # 第二步：根据意图选择对应的Agent
                 config = {"configurable": {"session_id": "default"}}
-                response = agent_with_chat_history.invoke(
-                    {"input": user_input}, config
-                )
+                
+                if intent == "record":
+                    print("使用记录Agent处理...")
+                    response = record_agent_with_history.invoke(
+                        {"input": user_input}, config
+                    )
+                else:
+                    print("使用闲聊Agent处理...")
+                    response = chat_agent_with_history.invoke(
+                        {"input": user_input}, config
+                    )
                 
                 # 显示助手回复
                 if "output" in response:
