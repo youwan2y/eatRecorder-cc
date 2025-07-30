@@ -95,7 +95,7 @@ class SimpleZhipuAIChatModel(BaseChatModel):
         # 调用ZhipuAI API
         try:
             response = self.client.chat.completions.create(
-                model="glm-4-plus",
+                model="glm-4.5-flash",
                 messages=zhipu_messages,
                 tools=tools_config,
                 tool_choice="auto" if tools_config else None,
