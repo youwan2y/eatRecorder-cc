@@ -2,7 +2,7 @@ import sqlite3
 import json
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
-from db_utils import DatabaseManager
+from app.database.db_manager import DatabaseManager
 
 class FunctionCallStatistics:
     def __init__(self, db_manager=None):

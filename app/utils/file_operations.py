@@ -1,6 +1,6 @@
 import os
 import json
-from db_utils import DatabaseManager
+from app.database.db_manager import DatabaseManager
 
 class FileManager:
     def __init__(self, db_manager=None):

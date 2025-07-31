@@ -2,8 +2,8 @@ import os
 import json
 import matplotlib.pyplot as plt
 from datetime import datetime
-from function_statistics import FunctionCallStatistics
-from db_utils import DatabaseManager
+from app.analytics.function_stats import FunctionCallStatistics
+from app.database.db_manager import DatabaseManager
 
 class DataVisualizer:
     def __init__(self, stats_manager=None, db_manager=None):

@@ -13,7 +13,7 @@ import json
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from db_utils import DatabaseManager
+from app.database.db_manager import DatabaseManager
 from app.tools.food_tools import recommend_food
 
 class TestSuite:
