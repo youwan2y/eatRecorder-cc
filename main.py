@@ -22,7 +22,7 @@ from app.agents.smart_agent import SmartAgent
 # 导入工具模块
 from app.tools.food_tools import (
     record_thing, get_all_records, get_records_by_date, 
-    get_total_spending, get_eating_stats
+    get_total_spending, get_eating_stats, recommend_food
 )
 from app.tools.file_tools import (
     read_file, write_file, list_directory
@@ -63,6 +63,7 @@ class EatRecorderApp:
         # 注册其他工具
         other_tools = [
             get_all_records, get_records_by_date, get_total_spending, get_eating_stats,
+            recommend_food,
             read_file, write_file, list_directory,
             get_function_stats, generate_function_chart, generate_eating_charts
         ]

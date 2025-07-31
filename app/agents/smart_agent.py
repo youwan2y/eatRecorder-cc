@@ -38,6 +38,13 @@ class SmartAgent(BaseAgent):
 - 提到日期时间（如：今天、昨天、3月2日）
 - 询问饮食记录相关的问题
 
+🍽️ 食物推荐场景：
+当用户表达以下意图时，主动使用recommend_food工具推荐：
+- 不知道吃什么（如：不知道吃什么、今天吃啥好）
+- 询问建议（如：有什么推荐吗、给我点建议）
+- 寻找灵感（如：吃点什么好呢、有啥好吃的）
+- 想换口味（如：想吃点别的、换个口味）
+
 💬 闲聊对话场景：
 当用户提到以下内容时，进行友好对话：
 - 日常问候和寒暄
@@ -47,6 +54,7 @@ class SmartAgent(BaseAgent):
 
 🛠️ 你可以使用的工具：
 - record_thing: 记录用户的饮食和消费信息（需要date、eat、money三个参数）
+- recommend_food: 基于用户最近的饮食历史推荐食物
 - get_all_records: 查询所有饮食记录
 - get_records_by_date: 查询特定日期的记录
 - get_total_spending: 获取总消费金额

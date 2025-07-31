@@ -114,7 +114,7 @@ class DatabaseManager:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            cursor.execute("SELECT date, food, money FROM eating_records ORDER BY date")
+            cursor.execute("SELECT date, food, money FROM eating_records ORDER BY created_at DESC")
             records = cursor.fetchall()
             
             conn.close()
@@ -214,4 +214,73 @@ class DatabaseManager:
         except Exception as e:
             print(f"计算总花费失败: {str(e)}")
             print(traceback.format_exc())
-            return 0 
+            return 0
+    
+    def get_recent_eating_records(self, limit=10):
+        """获取最近的饮食记录"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                "SELECT date, food, money FROM eating_records ORDER BY created_at DESC LIMIT ?", 
+                (limit,)
+            )
+            records = cursor.fetchall()
+            
+            conn.close()
+            
+            formatted_records = []
+            for record in records:
+                formatted_records.append({
+                    "date": record[0],
+                    "food": record[1],
+                    "money": record[2]
+                })
+            
+            print(f"获取到最近 {len(formatted_records)} 条饮食记录")
+            return formatted_records
+        except Exception as e:
+            print(f"获取最近饮食记录失败: {str(e)}")
+            print(traceback.format_exc())
+            return []
+    
+    def get_food_frequency_analysis(self, days=7):
+        """分析食物频率"""
+        try:
+            from datetime import datetime, timedelta
+            
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # 计算日期范围
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            
+            cursor.execute(
+                """SELECT food, COUNT(*) as count, 
+                          GROUP_CONCAT(DISTINCT date) as dates
+                   FROM eating_records 
+                   WHERE date >= ? 
+                   GROUP BY food 
+                   ORDER BY count DESC""",
+                (start_date.strftime('%Y-%m-%d'),)
+            )
+            results = cursor.fetchall()
+            
+            conn.close()
+            
+            food_analysis = []
+            for result in results:
+                food_analysis.append({
+                    "food": result[0],
+                    "count": result[1],
+                    "dates": result[2].split(',') if result[2] else []
+                })
+            
+            print(f"分析了 {len(food_analysis)} 种食物的频率")
+            return food_analysis
+        except Exception as e:
+            print(f"分析食物频率失败: {str(e)}")
+            print(traceback.format_exc())
+            return [] 
